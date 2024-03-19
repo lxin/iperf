@@ -24,7 +24,7 @@
 # file for complete information.
 
 # Initialize the autoconf system for the specified tool, version and mailing list
-AC_PREREQ([2.71])
+AC_PREREQ([2.69])
 AC_INIT([iperf],[3.16+],[https://github.com/esnet/iperf],[iperf],[https://software.es.net/iperf/])
 m4_include([config/ax_check_openssl.m4])
 m4_include([config/ax_pthread.m4])
@@ -131,6 +131,28 @@ AC_ARG_WITH([sctp],
     ]
 )
 
+# QUIC.  Allow user to disable QUIC support with --without-quic.
+# Otherwise we try to find whatever support is required.
+try_quic=true
+AC_ARG_WITH([quic],
+    [AS_HELP_STRING([--without-quic],
+        [disable QUIC])],
+    [
+        case "$withval" in
+	y | ye | yes)
+	  ;;
+	n | no)
+	try_quic=false
+	  ;;
+	*)
+	AC_MSG_ERROR([Invalid --with-quic value])
+	  ;;
+	esac
+    ], [
+        try_quic=true
+    ]
+)
+
 AC_CHECK_HEADERS([linux/tcp.h])
 
 # Check for SCTP support
@@ -141,6 +163,21 @@ AC_CHECK_HEADERS([netinet/sctp.h],
 		 AC_SEARCH_LIBS(sctp_bindx, [sctp])
 		 AC_CHECK_TYPES([struct sctp_assoc_value], [], [],
 				[[#include <netinet/sctp.h>]]),
+		 [],
+		 [#ifdef HAVE_SYS_SOCKET_H
+#include <sys/socket.h>
+#endif
+])
+fi
+
+# Check for QUIC support
+if $try_quic; then
+AC_CHECK_HEADERS([sys/socket.h])
+AC_CHECK_HEADERS([netinet/quic.h],
+		 AC_DEFINE([HAVE_QUIC_H], [1], [Have QUIC support.])
+		 AC_SEARCH_LIBS(quic_server_handshake, [quic])
+		 AC_CHECK_TYPES([struct quic_transport_param], [], [],
+				[[#include <netinet/quic.h>]]),
 		 [],
 		 [#ifdef HAVE_SYS_SOCKET_H
 #include <sys/socket.h>

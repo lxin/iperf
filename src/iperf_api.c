@@ -77,6 +77,9 @@
 #if defined(HAVE_SCTP_H)
 #include "iperf_sctp.h"
 #endif /* HAVE_SCTP_H */
+#if defined(HAVE_QUIC_H)
+#include "iperf_quic.h"
+#endif /* HAVE_QUIC_H */
 #include "timer.h"
 
 #include "cjson.h"
@@ -1122,6 +1125,12 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
         {"nstreams", required_argument, NULL, OPT_NUMSTREAMS},
         {"xbind", required_argument, NULL, 'X'},
 #endif
+#if defined(HAVE_QUIC_H)
+        {"quic", no_argument, NULL, OPT_QUIC},
+        {"pkey", required_argument, NULL, OPT_PKEY},
+        {"cert", required_argument, NULL, OPT_CERT},
+        {"no-cryption", no_argument, NULL, OPT_NO_CRYPTION},
+#endif
 	{"pidfile", required_argument, NULL, 'I'},
 	{"logfile", required_argument, NULL, OPT_LOGFILE},
 	{"forceflush", no_argument, NULL, OPT_FORCEFLUSH},
@@ -1272,6 +1281,39 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
                 return -1;
 #endif /* HAVE_SCTP_H */
 
+            case OPT_QUIC:
+#if defined(HAVE_QUIC_H)
+                set_protocol(test, Pquic);
+                client_flag = 1;
+                break;
+#else /* HAVE_QUIC_H */
+                i_errno = IEUNIMP;
+                return -1;
+#endif /* HAVE_QUIC_H */
+            case OPT_PKEY:
+#if defined(linux)
+                test->settings->pkey_file = strdup(optarg);
+                break;
+#else /* linux */
+                i_errno = IEUNIMP;
+                return -1;
+#endif /* linux */
+            case OPT_CERT:
+#if defined(linux)
+                test->settings->cert_file = strdup(optarg);
+                break;
+#else /* linux */
+                i_errno = IEUNIMP;
+                return -1;
+#endif /* linux */
+            case OPT_NO_CRYPTION:
+#if defined(linux)
+                test->settings->no_cryption = 1;
+                break;
+#else /* linux */
+                i_errno = IEUNIMP;
+                return -1;
+#endif /* linux */
             case OPT_NUMSTREAMS:
 #if defined(linux) || defined(__FreeBSD__)
                 test->settings->num_ostreams = unit_atoi(optarg);
@@ -1745,6 +1787,8 @@ iperf_parse_arguments(struct iperf_test *test, int argc, char **argv)
 	    blksize = 0;	/* try to dynamically determine from MSS */
 	else if (test->protocol->id == Psctp)
 	    blksize = DEFAULT_SCTP_BLKSIZE;
+	else if (test->protocol->id == Pquic)
+	    blksize = DEFAULT_QUIC_BLKSIZE;
 	else
 	    blksize = DEFAULT_TCP_BLKSIZE;
     }
@@ -2201,6 +2245,8 @@ send_parameters(struct iperf_test *test)
 	    cJSON_AddTrueToObject(j, "udp");
         else if (test->protocol->id == Psctp)
             cJSON_AddTrueToObject(j, "sctp");
+        else if (test->protocol->id == Pquic)
+            cJSON_AddTrueToObject(j, "quic");
 	cJSON_AddNumberToObject(j, "omit", test->omit);
 	if (test->server_affinity != -1)
 	    cJSON_AddNumberToObject(j, "server_affinity", test->server_affinity);
@@ -2310,6 +2356,8 @@ get_parameters(struct iperf_test *test)
 	    set_protocol(test, Pudp);
         if ((j_p = cJSON_GetObjectItem(j, "sctp")) != NULL)
             set_protocol(test, Psctp);
+        if ((j_p = cJSON_GetObjectItem(j, "quic")) != NULL)
+            set_protocol(test, Pquic);
 	if ((j_p = cJSON_GetObjectItem(j, "omit")) != NULL)
 	    test->omit = j_p->valueint;
 	if ((j_p = cJSON_GetObjectItem(j, "server_affinity")) != NULL)
@@ -2916,6 +2964,9 @@ iperf_defaults(struct iperf_test *testp)
 #if defined(HAVE_SCTP_H)
     struct protocol *sctp;
 #endif /* HAVE_SCTP_H */
+#if defined(HAVE_QUIC_H)
+    struct protocol *quic;
+#endif /* HAVE_QUIC_H */
 
     testp->omit = OMIT;
     testp->duration = DURATION;
@@ -3021,6 +3072,29 @@ iperf_defaults(struct iperf_test *testp)
 
     SLIST_INSERT_AFTER(udp, sctp, protocols);
 #endif /* HAVE_SCTP_H */
+
+#if defined(HAVE_QUIC_H)
+    quic = protocol_new();
+    if (!quic) {
+        protocol_free(tcp);
+        protocol_free(udp);
+#if defined(HAVE_SCTP_H)
+        protocol_free(sctp);
+#endif /* HAVE_SCTP_H */
+        return -1;
+    }
+
+    quic->id = Pquic;
+    quic->name = "QUIC";
+    quic->accept = iperf_quic_accept;
+    quic->listen = iperf_quic_listen;
+    quic->connect = iperf_quic_connect;
+    quic->send = iperf_quic_send;
+    quic->recv = iperf_quic_recv;
+    quic->init = iperf_quic_init;
+
+    SLIST_INSERT_AFTER(udp, quic, protocols);
+#endif /* HAVE_QUIC_H */
 
     testp->on_new_stream = iperf_on_new_stream;
     testp->on_test_start = iperf_on_test_start;
@@ -3616,7 +3690,7 @@ iperf_print_intermediate(struct iperf_test *test)
 	    start_time = iperf_time_in_secs(&temp_time);
 	    iperf_time_diff(&sp->result->start_time,&irp->interval_end_time, &temp_time);
 	    end_time = iperf_time_in_secs(&temp_time);
-                if (test->protocol->id == Ptcp || test->protocol->id == Psctp) {
+                if (test->protocol->id == Ptcp || test->protocol->id == Psctp || test->protocol->id == Pquic) {
                     if (test->sender_has_retransmits == 1 && stream_must_be_sender) {
                         /* Interval sum, TCP with retransmits. */
                         if (test->json_output)
@@ -3688,7 +3762,7 @@ iperf_print_results(struct iperf_test *test)
 	iperf_printf(test, "%s", report_bw_separator);
 	if (test->verbose)
 	    iperf_printf(test, "%s", report_summary);
-	if (test->protocol->id == Ptcp || test->protocol->id == Psctp) {
+	if (test->protocol->id == Ptcp || test->protocol->id == Psctp || test->protocol->id == Pquic) {
 	    if (test->sender_has_retransmits || test->other_side_has_retransmits) {
 	        if (test->bidirectional)
 	            iperf_printf(test, "%s", report_bw_retrans_header_bidir);
@@ -3829,7 +3903,7 @@ iperf_print_results(struct iperf_test *test)
                     receiver_omitted_packet_count = sp->omitted_packet_count;
                 }
 
-                if (test->protocol->id == Ptcp || test->protocol->id == Psctp) {
+                if (test->protocol->id == Ptcp || test->protocol->id == Psctp || test->protocol->id == Pquic) {
                     if (test->sender_has_retransmits) {
                         total_retransmits += sp->result->stream_retrans;
                     }
@@ -3856,7 +3930,7 @@ iperf_print_results(struct iperf_test *test)
                     bandwidth = 0.0;
                 }
                 unit_snprintf(nbuf, UNIT_LEN, bandwidth, test->settings->unit_format);
-                if (test->protocol->id == Ptcp || test->protocol->id == Psctp) {
+                if (test->protocol->id == Ptcp || test->protocol->id == Psctp || test->protocol->id == Pquic) {
                     if (test->sender_has_retransmits) {
                         /* Sender summary, TCP and SCTP with retransmits. */
                         if (test->json_output)
@@ -3960,7 +4034,7 @@ iperf_print_results(struct iperf_test *test)
                     bandwidth = 0.0;
                 }
                 unit_snprintf(nbuf, UNIT_LEN, bandwidth, test->settings->unit_format);
-                if (test->protocol->id == Ptcp || test->protocol->id == Psctp) {
+                if (test->protocol->id == Ptcp || test->protocol->id == Psctp || test->protocol->id == Pquic) {
                     /* Receiver summary, TCP and SCTP */
                     if (test->json_output)
                         cJSON_AddItemToObject(json_summary_stream, report_receiver, iperf_json_printf("socket: %d  start: %f  end: %f  seconds: %f  bytes: %d  bits_per_second: %f sender: %b", (int64_t) sp->socket, (double) start_time, (double) receiver_time, (double) end_time, (int64_t) bytes_received, bandwidth * 8, stream_must_be_sender));
@@ -4035,7 +4109,7 @@ iperf_print_results(struct iperf_test *test)
                 bandwidth = 0.0;
             }
             unit_snprintf(nbuf, UNIT_LEN, bandwidth, test->settings->unit_format);
-            if (test->protocol->id == Ptcp || test->protocol->id == Psctp) {
+            if (test->protocol->id == Ptcp || test->protocol->id == Psctp || test->protocol->id == Pquic) {
                 if (test->sender_has_retransmits) {
                     /* Summary sum, TCP with retransmits. */
                     if (test->json_output)
@@ -4265,7 +4339,7 @@ print_interval_results(struct iperf_test *test, struct iperf_stream *sp, cJSON *
 	    ** else nothing.
 	    */
 	    if (iperf_time_compare(&sp->result->start_time, &irp->interval_start_time) == 0) {
-		if (test->protocol->id == Ptcp || test->protocol->id == Psctp) {
+		if (test->protocol->id == Ptcp || test->protocol->id == Psctp || test->protocol->id == Pquic) {
 		    if (test->sender_has_retransmits == 1) {
 		        if (test->bidirectional)
 		            iperf_printf(test, "%s", report_bw_retrans_cwnd_header_bidir);
@@ -4307,7 +4381,7 @@ print_interval_results(struct iperf_test *test, struct iperf_stream *sp, cJSON *
     iperf_time_diff(&sp->result->start_time, &irp->interval_end_time, &temp_time);
     et = iperf_time_in_secs(&temp_time);
 
-    if (test->protocol->id == Ptcp || test->protocol->id == Psctp) {
+    if (test->protocol->id == Ptcp || test->protocol->id == Psctp || test->protocol->id == Pquic) {
 	if (test->sender_has_retransmits == 1 && sp->sender) {
 	    /* Interval, TCP with retransmits. */
 	    if (test->json_output)

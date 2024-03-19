@@ -62,9 +62,11 @@ typedef atomic_uint_fast64_t atomic_iperf_size_t;
 #define Ptcp SOCK_STREAM
 #define Pudp SOCK_DGRAM
 #define Psctp 12
+#define Pquic 13
 #define DEFAULT_UDP_BLKSIZE 1460 /* default is dynamically set, else this */
 #define DEFAULT_TCP_BLKSIZE (128 * 1024)  /* default read/write block size */
 #define DEFAULT_SCTP_BLKSIZE (64 * 1024)
+#define DEFAULT_QUIC_BLKSIZE (128 * 1024)
 #define DEFAULT_PACING_TIMER 1000
 #define DEFAULT_NO_MSG_RCVD_TIMEOUT 120000
 #define MIN_NO_MSG_RCVD_TIMEOUT 100
@@ -100,6 +102,10 @@ typedef atomic_uint_fast64_t atomic_iperf_size_t;
 #define OPT_RCV_TIMEOUT 27
 #define OPT_JSON_STREAM 28
 #define OPT_SND_TIMEOUT 29
+#define OPT_QUIC 30
+#define OPT_PKEY 31
+#define OPT_CERT 32
+#define OPT_NO_CRYPTION 33
 
 /* states */
 #define TEST_START 1
@@ -419,6 +425,7 @@ enum {
     IESNDTIMEOUT = 33,      // Illegal message send timeout
     IEUDPFILETRANSFER = 34, // Cannot transfer file using UDP
     IESERVERAUTHUSERS = 35,   // Cannot access authorized users file
+    IENOQUIC = 36,	    // No QUIC support available
     /* Test errors */
     IENEWTEST = 100,        // Unable to create a new test (check perror)
     IEINITTEST = 101,       // Test initialization failed (check perror)
