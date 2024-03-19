@@ -127,6 +127,11 @@ const char usage_longstr[] = "Usage: iperf3 [-s|-c host] [options]\n"
 #if defined(HAVE_TCP_USER_TIMEOUT)
                            "  --snd-timeout #           timeout for unacknowledged TCP data\n"
                            "                            (in ms, default is system settings)\n"
+#if defined(HAVE_QUIC_H)
+                           "  --pkey                    private key or pre-shared key for QUIC\n"
+                           "  --cert                    certificate for QUIC\n"
+                           "  --no-cryption             disable 1rt encryption for QUIC\n"
+#endif /* HAVE_QUIC_H */
 #endif /* HAVE_TCP_USER_TIMEOUT */
                            "  -d, --debug[=#]           emit debugging output\n"
                            "                            (optional optional \"=\" and debug level: 1-4. Default is 4 - all messages)\n"
@@ -157,6 +162,9 @@ const char usage_longstr[] = "Usage: iperf3 [-s|-c host] [options]\n"
                            "  -X, --xbind <name>        bind SCTP association to links\n"
                            "  --nstreams      #         number of SCTP streams\n"
 #endif /* HAVE_SCTP_H */
+#if defined(HAVE_QUIC_H)
+                           "  --quic                    use QUIC rather than TCP\n"
+#endif /* HAVE_QUIC_H */
                            "  -u, --udp                 use UDP rather than TCP\n"
                            "  --connect-timeout #       timeout for control connection setup (ms)\n"
                            "  -b, --bitrate #[KMG][/#]  target bitrate in bits/sec (0 for unlimited)\n"

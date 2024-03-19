@@ -171,6 +171,9 @@ struct iperf_settings
     char      *client_password;
     EVP_PKEY  *client_rsa_pubkey;
 #endif // HAVE_SSL
+    char      *pkey_file;
+    char      *cert_file;
+    int       no_cryption;
     int	      connect_timeout;	    /* socket connection timeout, in ms */
     int       idle_timeout;         /* server idle time timeout */
     unsigned int snd_timeout; /* Timeout for sending tcp messages in active mode, in us */

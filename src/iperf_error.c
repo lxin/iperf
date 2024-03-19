@@ -233,6 +233,9 @@ iperf_strerror(int int_errno)
 	case IENOSCTP:
 	    snprintf(errstr, len, "no SCTP support available");
 	    break;
+	case IENOQUIC:
+	    snprintf(errstr, len, "no QUIC support available");
+	    break;
         case IENEWTEST:
             snprintf(errstr, len, "unable to create a new test");
             perr = 1;
